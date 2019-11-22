@@ -1,0 +1,94 @@
+---
+title: "572-NPS score"
+author: "Snehal Thakur"
+date: "19/11/2019"
+output: html_document
+---
+```{r}
+NPSScoreData<-read.csv("D:/Shambhavi Chati/Fall'19/572/Assignments/Assignment 4/Data.csv")
+
+str(NPSScoreData)
+
+#Checking for Missing values
+library(mice)
+md.pattern(NPSScoreData)
+
+colSums(is.na(NPSScoreData))
+```
+```{r}
+#Chekcing for outliers
+boxplot.stats(NPSScoreData$MaritalStatus)
+boxplot.stats(NPSScoreData$AgeYrs)
+boxplot.stats(NPSScoreData$Sex)
+boxplot.stats(NPSScoreData$Sex)
+summary(NPSScoreData)
+```
+```{r}
+#There doesn't seem to be any signifacnt outliers.
+
+#Remove column "Serial no."
+NPSScoreData<-NPSScoreData[,-1]
+
+#Remove column "admission date" and "discharge date" as they seem irrelevant
+#Remove column "state" as it seemed redundant in front of columns "Coutnry" and "state zone"
+NPSScoreData<-NPSScoreData[,-which(names(NPSScoreData)%in%c("AdmissionDate","DischargeDate","State"))]
+
+#attaching the data
+attach(NPSScoreData)
+
+#separating data into training and test data
+set.seed(1234)
+index = sample(2, nrow(NPSScoreData), replace = T, prob = c(0.8,0.2))
+TrainData = NPSScoreData[index == 1, ]
+TestData = NPSScoreData[index == 2,]
+detach(NPSScoreData)
+
+```
+```{r}
+#(4) What does quasi-deparation mean?
+#Quasi-complete separation in logistic regression happens when the outcome variable separates a predictor variable or a combination of predictor variables almost completely.
+attach(TrainData)
+
+#Checking to see if quasi separation orblem exists using "detect_separation"
+library(brglm2)
+
+npsScore_logReg<-glm(NPS_Status~.,data=TrainData,family=binomial("logit"),method = "detect_separation")
+npsScore_logReg
+#there are 18 variables which have MLE estimate of -inf and inf, which are identified as variables which cause quasi seperation
+```
+```{r}
+#The above result shows that there is separation in the data.
+
+#running Linear Regression to check the coefficients for each predictor. If these are very large numbers then those can lead to quasi separation.
+npsScore_LRModel<-glm(NPS_Status~.,data=TrainData,family=binomial)
+summary(npsScore_LRModel)
+#Upon examining the results of "detect_seperation" and linear fit together 6 variables have both infinite MLE and positive coefficients 
+#Removing these variables
+
+TrainData_quasi<- TrainData[, -which(names(TrainData)%in%c( "STATEZONE", "EM_IMMEDIATEATTENTION", "EM_NURSING", "EM_DOCTOR", "FNB_FOODQUALITY", "FNB_FOODDELIVERYTIME", "FNB_DIETICIAN", "FNB_STAFFATTITUDE", "DP_DISCHARGETIME", "DP_DISCHARGEQUERIES", "DP_DISCHARGEPROCESS ", "CE_NPS"))]
+
+
+```
+```{r}
+#random forest
+
+library(randomForest)
+npsScore_rndmfrst<-randomForest(NPS_Status~.,data=TrainData_quasi,ntree=100,proximity=T,importance=T,mtry=10)
+npsScore_rndmfrst
+```
+```{r}
+#Caluclating prediction power of the training as well as test data
+library(caret)
+pred_testset<-predict(npsScore_rndmfrst,newdata = TestData)
+TestData$NPS_Status<-as.factor(TestData$NPS_Status)
+confusionMatrix(pred_testset,as.factor(TestData$NPS_Status))
+```
+```{r}
+#removing all quasi variables from the data set for logistic regression
+
+data_log_reg<- TrainData[, -which(names(TrainData)%in%c("MaritalStatus","BedCategory","Department"," Estimatedcost","InsPayorcategory", "Country","CE_CSAT","CE_VALUEFORMONEY", "CE_ACCESSIBILITY","EM_IMMEDIATEATTENTION", "EM_DOCTOR","EM_NURSING" ,"EM_OVERAL", "AD_TIME", "AD_TARRIFFPACKAGESEXPLAINATION", "AD_STAFFATTITUDE","INR_ROOMCLEANLINESS","INR_ROOMPEACE","INR_ROOMEQUIPMENT", "INR_ROOMAMBIENCE","FNB_FOODQUALITY", "FNB_FOODDELIVERYTIME", "FNB_DIETICIAN","FNB_STAFFATTITUDE", "AE_ATTENDEECARE","DOC_ATTITUDE", "DOC_VISITS ","DOC_TREATMENTEFFECTIVENESS", "NS_CALLBELLRESPONSE","NS_NURSESATTITUDE", "NS_NURSEPROACTIVENESS", " NS_NURSEPATIENCE", "OVS_OVERALLSTAFFATTITUDE", "OVS_OVERALLSTAFFPROMPTNESS", "OVS_SECURITYATTITUDE", "DP_DISCHARGETIME", " DP_DISCHARGEQUERIES", "DP_DISCHARGEPROCESS",  "LengthofStay", "CE_NPS "))]
+                                 
+#Making default=1 and setting rest =0
+
+
+```

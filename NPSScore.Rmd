@@ -7,7 +7,7 @@ output:
   html_document: default
 ---
 ```{r}
-NPSScoreData<-read.csv("C:/Users/Snehal Thakur/Desktop/IDS 572/Assignment 4/Train & Test data.csv")
+NPSScoreData<-read.csv("D:/Shambhavi Chati/Fall'19/572/Assignments/Assignment 4/Data.csv")
 
 str(NPSScoreData)
 
@@ -107,6 +107,7 @@ str(binary_quasiTrain)
 ```{r}
 #Run logisitc regression on binary classification
 binary_quasiTrain$binary<-as.factor(binary_quasiTrain$binary)
+binary_quasiTest$binary<- as.factor(binary_quasiTest$binary)
 str(binary_quasiTrain)
 logRegModelForBinaryClass<-glm(binary_quasiTrain$binary~.,data = binary_quasiTrain,family =binomial(link="logit"))
 
@@ -222,3 +223,116 @@ ada_binary_accuracy
 #Similary while comparing the results for running adaboost on both multi class and binary class, we can say that the prediction power of the binary class (~93%) is more than that of multiclass (~69%).
 ```
 
+```{r}
+#Handling multiclasses via over and under sampling
+library(caretEnsemble)
+library(caret)
+library(ROSE)
+library(DMwR)
+
+#oversampling
+table(binary_quasiTrain$binary)
+#The number of observations in class 1 are significantly less
+data_oversampled<- ovun.sample(binary~., data=binary_quasiTrain, method = "over", p=0.5)$data
+table(data_oversampled$binary)
+
+data_oversampled_test<- ovun.sample(binary~., data=binary_quasiTest, method = "over", p=0.5)$data
+table(data_oversampled_test$binary)
+#The classes are approximately balanced after oversampling
+#Creating data for undersampling
+data_undersampled<- ovun.sample(binary~., data=binary_quasiTrain, method = "under", p=0.5, seed = 1)$data
+table(data_undersampled$binary)
+
+data_undersampled_test<- ovun.sample(binary~., data=binary_quasiTest, method = "under", p=0.5)$data
+table(data_undersampled_test$binary)
+#The classes are approxmately balanced withh 420+ observations in each class
+
+#random forest for oversampled data
+
+rf_oversample <- randomForest(binary~., data= data_oversampled, ntree=100,mtry=10)
+
+plot(rf_oversample)
+pred_rf_oversample <- predict(rf_oversample, newdata = data_oversampled_test )
+confusionMatrix(pred_rf_oversample, data_oversampled_test$binary)
+
+#random forest for undersampled data
+rf_undersample <- randomForest(binary~., data= data_undersampled, ntree=100,mtry=10)
+
+plot(rf_undersample)
+pred_rf_undersample <- predict(rf_undersample, newdata = data_undersampled_test )
+plot(rf_undersample)
+confusionMatrix(pred_rf_undersample, data_undersampled_test$binary)
+
+#randomforest for SMOTE
+#convert data to ordinal variables
+#creating a dataset uing SMOTE
+
+data_smote<- SMOTE(binary~., binary_quasiTrain, perc.over =500, perc.under = 500, k=5 )
+data_smote_test<- SMOTE(binary~., binary_quasiTest, perc.over =500, perc.under = 500, k=5 )
+
+for (i in 7:41){
+  data_smote[,i]<-ordered(data_smote[,i],levels=1:4)
+}
+#repeating above for test data
+for (i in 7:41){
+  data_smote_test[,i]<-ordered(data_smote_test[,i],levels=1:4)
+}
+
+
+rf_smote <- randomForest(binary~., data=data_smote, ntree=100, mtry=10, na.action = na.roughfix)
+pred_rf_smote<- predict(rf_smote, newdata= data_smote_test)
+confusionMatrix(pred_rf_smote, data_smote_test$binary)
+
+
+#USing Random forest for over, under and SMOTE sampling, smote gives the best measure of accuracy. 
+
+```
+
+```{r}
+#ADA Boost for oversampled data
+library(adabag)
+
+ada_boost_oversample<- boosting.cv(binary~.,data = data_oversampled, boos=TRUE, mfinal=10, control = rpart.control(cp = -1))
+ada_boost_oversample[-1]
+
+ada_boost_over<- boosting(binary~.,data = data_oversampled, boos=TRUE, mfinal=50)
+
+ada_boost_oversample_pred <- predict.boosting(ada_boost_over,newdata = data_oversampled_test, newmfinal=8)
+
+#confusion matrix
+ada_boost_oversample_pred$confusion
+accuracy_over<- 1- ada_boost_oversample_pred$error
+accuracy_over
+
+```
+
+```{r}
+#adaboost for under sampling
+
+ada_boost_undersample<- boosting.cv(binary~.,data = data_undersampled, boos=TRUE, mfinal=10, control = rpart.control(cp = -1))
+ada_boost_undersample[-1]
+
+ada_boost_under<- boosting(binary~.,data = data_undersampled, boos=TRUE, mfinal=50)
+
+ada_boost_undersample_pred <- predict.boosting(ada_boost_under,newdata = data_undersampled_test, newmfinal=8)
+
+#confusion matrix
+ada_boost_oversample_pred$confusion
+accuracy_under<- 1- ada_boost_undersample_pred$error
+accuracy_under
+```
+```{r}
+ada_boost_smote<- boosting.cv(binary~.,data = data_smote, boos=TRUE, mfinal=10, control = rpart.control(cp = -1))
+ada_boost_smote[-1]
+
+ada_boost_smote<- boosting(binary~.,data = data_smote, boos=TRUE, mfinal=50)
+
+ada_boost_smote_pred <- predict.boosting(ada_boost_smote,newdata = data_smote_test, newmfinal=8)
+
+#confusion matrix
+ada_boost_smote_pred$confusion
+accuracy_smote<- 1- ada_boost_smote_pred$error
+accuracy_smote
+
+#for all the sampled data for ada boost smote gives the highest accuracy.
+```
